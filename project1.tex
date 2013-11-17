@@ -1,0 +1,66 @@
+\documentclass{article}
+\usepackage{hyperref}
+\usepackage[total={7in,9.5in},top=0.5in,left=0.5in,includefoot]{geometry}
+\usepackage{Sweave}
+\begin{document}
+\input{project1-concordance}
+
+\title{Analysis of Peer-Lending Through The Lending Club}
+\author{Carl~A.~B.~Pearson}
+\maketitle
+\section*{Introduction}
+The Lending Club\cite{lending} is a service which connects borrowers and lenders.  It advertises itself as a way to short-circuit banking institutions, thereby reducing transaction costs, and sharing the resulting gains back to the participants.  This analysis provides a fitting of their mediated interest rates for small loans.
+
+\section{Methods}
+For specific code, see \href{git}{git} for the source \texttt{.rnw} file.
+\begin{enumerate}
+\item obtained data set from \href{https://spark-public.s3.amazonaws.com/dataanalysis/loansData.csv}{https://spark-public.s3.amazonaws.com/dataanalysis/loansData.csv}
+\item transform interest rate into numeric data,
+\item transform Debt-To-Income ratio into numeric data,
+\item create a new numeric field FICO.num from the FICO\cite{wikiFICO} range from the middle of the range,
+\item scale Amount Requested to thousand dollars and FICO to hundreds of FICO,
+\item assign 0 to resolve missing values in Monthly Income, Open Credit Lines, Revolving Credit Balance, and Inquires in the Last 6 Months fields,
+\item review box plot of interest rate by the FICO range factors, which indicates a fairly clear ``elbow''
+\item iterating over the various levels of FICO score, review scatter/box plots of the interest rate as a function of other parameters.
+\end{enumerate}
+
+\section{Results}
+For a broad range of scores, the amount of money requested appears to have noticeable linear relation with the interest rate.  The loan duration also appears to distinguish groups.  Using R and its \texttt{lm(formula, ...)} fitting function, we can
+\begin{Schunk}
+\begin{Sinput}
+> dt <- clean(read.csv("./loansData.csv"))
+> # with clean(...) operations in Methods
+> model<-with(dt,{lm(Interest.Rate~Amount.Requested+FICO.num+Loan.Length)})
+\end{Sinput}
+\end{Schunk}
+which yields a model (with coefficients rounded to the significant figures of the input)
+$$
+\textrm{Int.Rate} = 73 + 0.14*\textrm{Amt.Req} + -8.8*\textrm{FICO} + 3.3*(\textrm{Loan.Len} == 60)
+$$
+with fit statistics as summarized by R: $r^2 = 0.74$ and coefficient significances:
+% latex table generated in R 3.0.1 by xtable 1.7-1 package
+% Sun Nov 17 15:07:08 2013
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrrrr}
+  \hline
+ & Estimate & Std. Error & t value & Pr($>$$|$t$|$) \\ 
+  \hline
+(Intercept) & 72.6319 & 0.8548 & 84.97 & 0.0000 \\ 
+  Amount.Requested & 0.1384 & 0.0060 & 23.20 & 0.0000 \\ 
+  FICO.num & -8.7590 & 0.1210 & -72.37 & 0.0000 \\ 
+  Loan.Length60 months & 3.2927 & 0.1121 & 29.37 & 0.0000 \\ 
+   \hline
+\end{tabular}
+\end{table}
+\section{Conclusion}
+The primary drivers of loan interest are (1) the expected risk associated with loan (FICO), (2) the amount of capital at risk (Amount Requested), and (3) the maximum time that capital is at risk (Loan Length).  Most of the variation in the interest rates can be explained by these parameters alone.
+
+\section{References}
+\bibliographystyle{plos2009}
+\bibliography{list}
+
+
+
+
+\end{document}

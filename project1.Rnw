@@ -1,0 +1,148 @@
+\documentclass{article}
+\usepackage{hyperref}
+\usepackage[total={7in,9.5in},top=0.5in,left=0.5in,includefoot]{geometry}
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+
+\title{Analysis of Peer-Lending Through The Lending Club}
+\author{Carl~A.~B.~Pearson}
+\maketitle
+\section*{Introduction}
+The Lending Club\cite{lending} is a service which connects borrowers and lenders.  It advertises itself as a way to short-circuit banking institutions, thereby reducing transaction costs, and sharing the resulting gains back to the participants.  This analysis provides a fitting of their mediated interest rates for small loans.
+
+\section{Methods}
+For specific code, see \href{git}{git} for the source \texttt{.rnw} file.
+\begin{enumerate}
+\item obtained data set from \href{https://spark-public.s3.amazonaws.com/dataanalysis/loansData.csv}{https://spark-public.s3.amazonaws.com/dataanalysis/loansData.csv}
+\item transform interest rate into numeric data,
+\item transform Debt-To-Income ratio into numeric data,
+\item create a new numeric field FICO.num from the FICO\cite{wikiFICO} range from the middle of the range,
+\item scale Amount Requested to thousand dollars and FICO to hundreds of FICO,
+\item assign 0 to resolve missing values in Monthly Income, Open Credit Lines, Revolving Credit Balance, and Inquires in the Last 6 Months fields,
+\item review box plot of interest rate by the FICO range factors, which indicates a fairly clear ``elbow''
+\item iterating over the various levels of FICO score, review scatter/box plots of the interest rate as a function of other parameters.
+\end{enumerate}
+<<cleaner,echo=FALSE>>=
+require(data.table)
+clean <- function(dt) {
+  dt<-data.table(dt)
+  dt$Amount.Requested<-dt$Amount.Requested/1000
+  dt$Interest.Rate<-as.numeric(gsub("%","", dt$Interest.Rate, fixed=T))
+  dt$Debt.To.Income.Ratio<-as.numeric(gsub("%","", dt$Debt.To.Income.Ratio, fixed=T))/100
+  dt[,FICO.num := mean(as.numeric(strsplit(as.character(FICO.Range),"-",fixed=T)[[1]]))/100, by=list(FICO.Range)]
+  dt[is.na(Monthly.Income), Monthly.Income := 0L]
+  dt[is.na(Open.CREDIT.Lines), Open.CREDIT.Lines := 0L]
+  dt[is.na(Revolving.CREDIT.Balance), Revolving.CREDIT.Balance := 0L]
+  dt[is.na(Inquiries.in.the.Last.6.Months), Inquiries.in.the.Last.6.Months := 0L]  
+}
+@
+
+\section{Results}
+For a broad range of scores, the amount of money requested appears to have noticeable linear relation with the interest rate.  The loan duration also appears to distinguish groups.  Using R and its \texttt{lm(formula, ...)} fitting function, we can
+<<rCode>>=
+dt <- clean(read.csv("./loansData.csv"))
+# with clean(...) operations in Methods
+model<-with(dt,{lm(Interest.Rate~Amount.Requested+FICO.num+Loan.Length)})
+@
+which yields a model (with coefficients rounded to the significant figures of the input)
+$$
+\textrm{Int.Rate} = \Sexpr{signif(model$coefficients[1],2)} + \Sexpr{signif(model$coefficients[2],2)}*\textrm{Amt.Req} + \Sexpr{signif(model$coefficients[3],2)}*\textrm{FICO} + \Sexpr{signif(model$coefficients[4],2)}*(\textrm{Loan.Len} == 60)
+$$
+with fit statistics as summarized by R: $r^2 = \Sexpr{signif(summary(model)[["r.squared"]],2)}$ and coefficient significances:
+<<results=tex,echo=FALSE>>=
+ xtable::xtable( summary(model) )
+@
+
+\section{Conclusion}
+The primary drivers of loan interest are (1) the expected risk associated with loan (FICO), (2) the amount of capital at risk (Amount Requested), and (3) the maximum time that capital is at risk (Loan Length).  Most of the variation in the interest rates can be explained by these parameters alone.
+
+\section{References}
+\bibliographystyle{plos2009}
+\bibliography{list}
+<<outputPlot,echo=FALSE>>=
+require(akima)
+lvls <- levels(dt$Loan.Length)
+plot1.data<-dt[Loan.Length == lvls[1], mean(Interest.Rate), by=list(Amount.Requested, FICO.num)]
+plot2.data<-dt[Loan.Length == lvls[2], mean(Interest.Rate), by=list(Amount.Requested, FICO.num)]
+
+xlim<-c(min(plot1.data$FICO.num,plot2.data$FICO.num),max(plot1.data$FICO.num,plot2.data$FICO.num))
+xs<-seq(xlim[1],xlim[2],length.out=50)
+ylim<-c(min(plot1.data$Amount.Requested,plot2.data$Amount.Requested),max(plot1.data$Amount.Requested,plot2.data$Amount.Requested))
+ys<-seq(ylim[1],ylim[2],length.out=50)
+zlim<-c(min(plot1.data$V1,plot2.data$V1),max(plot1.data$V1,plot2.data$V1))
+
+res1<-with(plot1.data, { interp(FICO.num, Amount.Requested, V1, xo=xs,yo=ys) })
+res2<-with(plot2.data, { interp(FICO.num, Amount.Requested, V1, xo=xs,yo=ys) })
+
+png("assn1_1.png",width=10,height=10,units="cm",res=144)
+filled.contour(res1, zlim=zlim, xlim=xlim, ylim=ylim, ylab="$1k Req. Amt.", main="30 Mon. Loans")
+png("assn1_2.png",width=10,height=10,units="cm",res=144)
+filled.contour(res2, zlim=zlim, xlim=xlim, ylim=ylim, yaxt="n", xlab="Scaled FICO", main="60 Mon. Loans")
+dev.off()
+png("assn1_3.png",width=10,height=10,units="cm",res=144)
+filled.contour(res1$x, res1$y, res2$z-res1$z, zlim=zlim, xlim=xlim, ylim=ylim, yaxt="n", main="Image Diff", xlab="")
+dev.off()
+@
+
+<<byFICO,echo=FALSE>>=
+boxplot(dt$Interest.Rate~dt$FICO.Range,varwidth=T)
+lvls<-levels(dt$FICO.Range)
+# fairly consistent linear relation
+invisible(lapply(lvls,function(lvl){
+  plot((dt[FICO.Range==lvl]$Amount.Requested-min(dt[FICO.Range==lvl]$Amount.Requested))/max(dt[FICO.Range==lvl]$Amount.Requested), dt[FICO.Range==lvl]$Interest.Rate, ylab="Rate", xlab="Norm. Amt. Req.", main=paste("FICO", lvl))
+}))
+## also fairly consistent
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+  plot((slice$Amount.Funded.By.Investors-min(slice$Amount.Funded.By.Investors))/max(slice$Amount.Funded.By.Investors), slice$Interest.Rate, ylab="Rate", xlab="Amt. Funded", main=paste("FICO", lvl))
+}))
+## disambiguate - these seem pretty identical; causality goes from req -> rate -> funded, so stick with req
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+  plot(slice$Amount.Requested, slice$Amount.Funded.By.Investors, ylab="Funded", xlab="Amt. Req.", main=paste("FICO", lvl))
+}))
+## no obvious relation
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+  plot((slice$Monthly.Income-min(slice$Monthly.Income))/max(slice$Monthly.Income), slice$Interest.Rate, ylab="Rate", xlab="Monthly Inc.", main=paste("FICO", lvl))
+}))
+## no obvious relation
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+  plot((slice$Debt.To.Income.Ratio-min(slice$Debt.To.Income.Ratio))/max(slice$Debt.To.Income.Ratio), slice$Interest.Rate, ylab="Rate", xlab="Debt Ratio", main=paste("FICO", lvl))
+}))
+## longer loans have pretty consistently higher interest rates
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+  boxplot(slice$Interest.Rate ~ slice$Loan.Length, ylab="Rate", xlab="Loan time", main=paste("FICO", lvl),varwidth=T)
+}))
+## no obvious relation
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+  boxplot(slice$Interest.Rate ~ slice$Loan.Purpose, ylab="Rate", xlab="Loan Purpose", main=paste("FICO", lvl),varwidth=T)
+}))
+## no obvious relation
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+  boxplot(slice$Interest.Rate ~ slice$Home.Ownership, ylab="Rate", xlab="Home Own.", main=paste("FICO", lvl),varwidth=T)
+}))
+## no obvious relation
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+    boxplot(slice$Interest.Rate ~ slice$Employment.Length, ylab="Rate", xlab="Emp.", main=paste("FICO", lvl),varwidth=T)
+}))
+## no obvious relation
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+    boxplot(slice$Interest.Rate ~ slice$Open.CREDIT.Lines, ylab="Rate", xlab="Open Cred", main=paste("FICO", lvl),varwidth=T)
+}))
+## no obvious relation
+invisible(lapply(lvls,function(lvl){
+  slice <- dt[FICO.Range==lvl]
+    plot(slice$Revolving.CREDIT.Balance, slice$Interest.Rate, ylab="Rate", xlab="Rev Cred", main=paste("FICO", lvl),varwidth=T)
+}))
+@
+
+
+
+\end{document}
