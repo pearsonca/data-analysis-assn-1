@@ -1,0 +1,8 @@
+
+cacheSweaveStorage*
+
+*.gz
+
+*.log
+
+*.tex

@@ -11,7 +11,7 @@
 The Lending Club\cite{lending} is a service which connects borrowers and lenders.  It advertises itself as a way to short-circuit banking institutions, thereby reducing transaction costs, and sharing the resulting gains back to the participants.  This analysis provides a fitting of their mediated interest rates for small loans.
 
 \section{Methods}
-For specific code, see \href{git}{git} for the source \texttt{.rnw} file.
+For specific code, see \href{github.com/pearsonca/data-analysis-assn-1}{github.com/pearsonca/data-analysis-assn-1} for the source \texttt{.rnw} file.
 \begin{enumerate}
 \item obtained data set from \href{https://spark-public.s3.amazonaws.com/dataanalysis/loansData.csv}{https://spark-public.s3.amazonaws.com/dataanalysis/loansData.csv}
 \item transform interest rate into numeric data,
