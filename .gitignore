@@ -6,3 +6,7 @@ cacheSweaveStorage*
 *.log
 
 *.tex
+
+*.tex
+
+*.log
